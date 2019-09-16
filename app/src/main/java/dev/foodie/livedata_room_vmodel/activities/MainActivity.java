@@ -8,6 +8,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModel;
 import androidx.lifecycle.ViewModelProviders;
+import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -28,11 +29,12 @@ import dev.foodie.livedata_room_vmodel.viewmodels.NoteViewModel;
 public class MainActivity extends AppCompatActivity {
 
     public static final int REQUEST_CODE = 1;
+    public static final int EDIT_REQUEST_CODE = 2;
     private NoteViewModel noteViewModel;
-    private LiveData<List<Note>> notes;
 
     private RecyclerView noteRecyclerView;
     private NoteAdapter noteAdapter;
+    private ItemTouchHelper itemTouchHelper;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,14 +45,42 @@ public class MainActivity extends AppCompatActivity {
         noteRecyclerView.setHasFixedSize(true);
         noteRecyclerView.setLayoutManager(new LinearLayoutManager(this));
 
-        noteAdapter = new NoteAdapter(this);
+        noteAdapter = new NoteAdapter();
         noteRecyclerView.setAdapter(noteAdapter);
 
         noteViewModel = ViewModelProviders.of(this).get(NoteViewModel.class);
         this.noteViewModel.getNotes().observe(this, new Observer<List<Note>>() {
             @Override
             public void onChanged(List<Note> notes) {
-                noteAdapter.setNotes(notes);
+                noteAdapter.submitList(notes);
+            }
+        });
+
+        itemTouchHelper = new ItemTouchHelper(new ItemTouchHelper.SimpleCallback(0,
+                ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT) {
+
+            @Override
+            public boolean onMove(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder, @NonNull RecyclerView.ViewHolder target) {
+                return false;
+            }
+
+            @Override
+            public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
+                noteViewModel.deleteNote(noteAdapter.getNoteAt(viewHolder.getAdapterPosition()));
+                Toast.makeText(MainActivity.this, "Note deleted!", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        itemTouchHelper.attachToRecyclerView(noteRecyclerView);
+
+        noteAdapter.setmOnItemClickListener(new NoteAdapter.OnItemClickListener() {
+            @Override
+            public void itemClicked(Note note) {
+                Intent editNoteIntent = new Intent(MainActivity.this, AddEditNoteActivity.class);
+                editNoteIntent.putExtra("note", note);
+                editNoteIntent.putExtra("editMode", true);
+
+                startActivityForResult(editNoteIntent, EDIT_REQUEST_CODE);
             }
         });
     }
@@ -63,11 +93,15 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
-        switch(item.getItemId()) {
+        switch (item.getItemId()) {
             case R.id.add_note: {
-                Intent addNoteIntent = new Intent(this, AddNoteActivity.class);
+                Intent addNoteIntent = new Intent(this, AddEditNoteActivity.class);
                 startActivityForResult(addNoteIntent, REQUEST_CODE);
                 break;
+            }
+            case R.id.delete_all_notes: {
+                noteViewModel.deleteAllNotes();
+                Toast.makeText(this, "All notes deleted!", Toast.LENGTH_SHORT).show();
             }
             default: {
                 return super.onOptionsItemSelected(item);
@@ -89,6 +123,12 @@ public class MainActivity extends AppCompatActivity {
 
                 noteViewModel.addNote(note);
 
+            } else if (requestCode == EDIT_REQUEST_CODE && resultCode == RESULT_OK) {
+                Note note = (Note) data.getSerializableExtra("note");
+                if (note != null) {
+                    noteViewModel.updateNote(note);
+                    Toast.makeText(this, "Note updated!", Toast.LENGTH_SHORT).show();
+                }
             }
         } else {
             Toast.makeText(this, "No note saved!", Toast.LENGTH_SHORT).show();
@@ -97,6 +137,6 @@ public class MainActivity extends AppCompatActivity {
 }
 
 /*
-* TODO: read up on entity documentation!
-* TODO: read on possibilities that can be achieved in using the Room helper!
-* */
+ * TODO: read up on entity documentation!
+ * TODO: read on possibilities that can be achieved in using the Room helper!
+ * */
